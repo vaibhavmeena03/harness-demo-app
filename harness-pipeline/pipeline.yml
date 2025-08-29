@@ -1,0 +1,284 @@
+pipeline:
+  name: harness-react-sample-pipeline
+  identifier: harness_react_sample_pipeline
+  description: "Complete CI/CD pipeline for Harness DevOps React POC - Build, Test, and Deploy to S3"
+  projectIdentifier: <+project.identifier>
+  orgIdentifier: <+org.identifier>
+  tags:
+    app: harness-react-sample
+    type: ci-cd
+    environment: production
+  stages:
+    - stage:
+        name: build-and-test
+        identifier: build_andTest
+        description: "Build and test the React application"
+        type: CI
+        spec:
+          cloneCodebase: true
+          execution:
+            steps:
+              - step:
+                  name: Checkout Code
+                  identifier: checkoutCode
+                  type: GitClone
+                  timeout: 10m
+                  spec:
+                    connectorRef: github-connector
+                    gitFetchType: Branch
+                    branch: main
+                    repoName: amitjainharbinger/harness-react-sample
+              - step:
+                  name: Setup Node.js
+                  identifier: setupNode
+                  type: Run
+                  timeout: 10m
+                  spec:
+                    shell: Sh
+                    command: |
+                      # Install Node.js 18
+                      curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+                      sudo apt-get install -y nodejs
+                      
+                      # Verify installation
+                      node --version
+                      npm --version
+              - step:
+                  name: Install Dependencies
+                  identifier: installDependencies
+                  type: Run
+                  timeout: 15m
+                  spec:
+                    shell: Sh
+                    command: |
+                      npm ci
+                      npm audit fix --audit-level=moderate || true
+              - step:
+                  name: Run Tests
+                  identifier: runTests
+                  type: Run
+                  timeout: 10m
+                  spec:
+                    shell: Sh
+                    command: |
+                      npm run test -- --run --coverage
+                      
+                      # Check test coverage
+                      if [ -f "coverage/lcov-report/index.html" ]; then
+                        echo "Test coverage report generated successfully"
+                      else
+                        echo "Test coverage report not found"
+                        exit 1
+                      fi
+              - step:
+                  name: Build Application
+                  identifier: buildApplication
+                  type: Run
+                  timeout: 15m
+                  spec:
+                    shell: Sh
+                    command: |
+                      npm run build
+                      
+                      # Verify build output
+                      if [ -d "dist" ] && [ -f "dist/index.html" ]; then
+                        echo "Build completed successfully"
+                        
+                        # Create deployment package
+                        tar -czf react-app-build.tar.gz -C dist .
+                        echo "Deployment package created: react-app-build.tar.gz"
+                      else
+                        echo "Build failed - dist directory or index.html not found"
+                        exit 1
+                      fi
+              - step:
+                  name: Upload Build Artifact
+                  identifier: uploadBuildArtifact
+                  type: Run
+                  timeout: 10m
+                  spec:
+                    shell: Sh
+                    command: |
+                      # Upload build artifact to S3 for deployment
+                      aws s3 cp react-app-build.tar.gz s3://harness-react-sample-bucket/builds/
+                      
+                      # Set artifact metadata
+                      aws s3api copy-object \
+                        --bucket harness-react-sample-bucket \
+                        --copy-source harness-react-sample-bucket/builds/react-app-build.tar.gz \
+                        --key builds/react-app-build.tar.gz \
+                        --metadata-directive REPLACE \
+                        --metadata build-date=$(date -u +%Y-%m-%dT%H:%M:%SZ),commit=$(git rev-parse HEAD)
+            platform:
+              os: Linux
+              arch: Amd64
+          caching:
+            enabled: true
+            paths:
+              - /root/.npm
+              - node_modules
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: deploy-to-s3
+        identifier: deployToS3
+        description: "Deploy React application to AWS S3"
+        type: Deployment
+        spec:
+          deploymentType: S3
+          service:
+            serviceRef: harness_react_sample
+            serviceInputs:
+              serviceDefinition:
+                type: S3
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: <+input>
+                      sources: <+input>
+          environment:
+            environmentRef: react_app_production
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: s3_infrastructure
+          execution:
+            steps:
+              - step:
+                  name: Download Build Artifact
+                  identifier: downloadBuildArtifact
+                  type: Run
+                  timeout: 10m
+                  spec:
+                    shell: Sh
+                    command: |
+                      # Download the latest build artifact
+                      aws s3 cp s3://harness-react-sample-bucket/builds/react-app-build.tar.gz .
+                      tar -xzf react-app-build.tar.gz
+                      echo "Build artifact downloaded and extracted"
+              - step:
+                  name: Configure S3 Bucket
+                  identifier: configureS3Bucket
+                  type: Run
+                  timeout: 10m
+                  spec:
+                    shell: Sh
+                    command: |
+                      # Enable static website hosting
+                      aws s3 website s3://harness-react-sample-bucket \
+                        --index-document index.html \
+                        --error-document index.html
+                      
+                      # Configure CORS
+                      aws s3api put-bucket-cors \
+                        --bucket harness-react-sample-bucket \
+                        --cors-configuration '{
+                          "CORSRules": [
+                            {
+                              "AllowedHeaders": ["*"],
+                              "AllowedMethods": ["GET", "HEAD"],
+                              "AllowedOrigins": ["*"],
+                              "ExposeHeaders": []
+                            }
+                          ]
+                        }'
+                      
+                      # Set bucket policy for public read access
+                      aws s3api put-bucket-policy \
+                        --bucket harness-react-sample-bucket \
+                        --policy '{
+                          "Version": "2012-10-17",
+                          "Statement": [
+                            {
+                              "Sid": "PublicReadGetObject",
+                              "Effect": "Allow",
+                              "Principal": "*",
+                              "Action": "s3:GetObject",
+                              "Resource": "arn:aws:s3:::harness-react-sample-bucket/*"
+                            }
+                          ]
+                        }'
+              - step:
+                  name: Deploy to S3
+                  identifier: deployToS3
+                  type: Run
+                  timeout: 15m
+                  spec:
+                    shell: Sh
+                    command: |
+                      # Sync build files to S3
+                      aws s3 sync . s3://harness-react-sample-bucket/ \
+                        --delete \
+                        --cache-control "max-age=31536000,public" \
+                        --exclude "*.tar.gz" \
+                        --exclude "node_modules/*" \
+                        --exclude "src/*" \
+                        --exclude "*.yml" \
+                        --exclude "*.yaml"
+                      
+                      # Set proper content types
+                      aws s3 cp index.html s3://harness-react-sample-bucket/ \
+                        --content-type "text/html" \
+                        --cache-control "no-cache"
+                      
+                      aws s3 cp assets/ s3://harness-react-sample-bucket/assets/ \
+                        --recursive \
+                        --cache-control "max-age=31536000,public"
+                      
+                      echo "Deployment completed successfully"
+                      
+                      # Get website URL
+                      WEBSITE_URL=$(aws s3api get-bucket-website --bucket harness-react-sample-bucket --query 'WebsiteEndpoint' --output text)
+                      echo "Website URL: http://$WEBSITE_URL"
+              - step:
+                  name: Health Check
+                  identifier: healthCheck
+                  type: Run
+                  timeout: 10m
+                  spec:
+                    shell: Sh
+                    command: |
+                      # Wait for deployment to propagate
+                      sleep 30
+                      
+                      # Get website URL
+                      WEBSITE_URL=$(aws s3api get-bucket-website --bucket harness-react-sample-bucket --query 'WebsiteEndpoint' --output text)
+                      
+                      # Perform health check
+                      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://$WEBSITE_URL")
+                      
+                      if [ "$HTTP_STATUS" = "200" ]; then
+                        echo "Health check passed - HTTP $HTTP_STATUS"
+                        echo "Application deployed successfully to: http://$WEBSITE_URL"
+                      else
+                        echo "Health check failed - HTTP $HTTP_STATUS"
+                        exit 1
+                      fi
+            rollbackSteps:
+              - step:
+                  name: Rollback Deployment
+                  identifier: rollbackDeployment
+                  type: Run
+                  timeout: 10m
+                  spec:
+                    shell: Sh
+                    command: |
+                      echo "Rolling back deployment..."
+                      
+                      # Restore previous version if available
+                      if aws s3 ls s3://harness-react-sample-bucket/backup/ | grep -q "previous-version"; then
+                        aws s3 sync s3://harness-react-sample-bucket/backup/previous-version/ s3://harness-react-sample-bucket/ --delete
+                        echo "Rollback completed - previous version restored"
+                      else
+                        echo "No previous version available for rollback"
+                      fi
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

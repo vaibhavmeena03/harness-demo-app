@@ -1,0 +1,10 @@
+environment:
+  name: react-app-production
+  identifier: react_app_production
+  description: "Production environment for React app deployment"
+  tags:
+    environment: production
+    app: harness-react-sample
+  type: Production
+  orgIdentifier: <+org.identifier>
+  projectIdentifier: <+project.identifier>

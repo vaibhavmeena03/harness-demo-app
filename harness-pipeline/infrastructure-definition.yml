@@ -1,0 +1,14 @@
+infrastructureDefinition:
+  name: s3-infrastructure
+  identifier: s3_infrastructure
+  description: "S3 infrastructure for React app deployment"
+  orgIdentifier: <+org.identifier>
+  projectIdentifier: <+project.identifier>
+  environmentRef: react_app_production
+  type: S3
+  spec:
+    connectorRef: aws-connector
+    region: <+variables.awsRegion>
+    bucketName: <+variables.bucketName>
+    prefix: app/
+    enableCD: true

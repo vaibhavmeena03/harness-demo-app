@@ -1,0 +1,24 @@
+connector:
+  name: github-connector
+  identifier: github-connector
+  description: "GitHub connector for React app source code"
+  accountIdentifier: <+account.identifier>
+  orgIdentifier: <+org.identifier>
+  projectIdentifier: <+project.identifier>
+  type: Github
+  spec:
+    url: https://github.com/<+variables.githubUsername>/<+variables.repositoryName>
+    validationRepo: <+variables.githubUsername>/<+variables.repositoryName>
+    authentication:
+      type: Http
+      spec:
+        type: Username
+        spec:
+          username: <+variables.githubUsername>
+          passwordRef: harness_gitpat
+    apiAccess:
+      type: Token
+      spec:
+        tokenRef: harness_gitpat
+    delegateSelectors: []
+    executeOnDelegate: false

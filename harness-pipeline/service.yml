@@ -1,0 +1,39 @@
+service:
+  name: harness-react-sample
+  identifier: harness_react_sample
+  description: "React application service for Harness DevOps POC"
+  orgIdentifier: <+org.identifier>
+  projectIdentifier: <+project.identifier>
+  serviceDefinition:
+    type: Custom
+    spec:
+      artifacts:
+        primary:
+          primaryArtifactRef: <+input>
+          sources:
+            - spec:
+                connectorRef: github-connector
+                gitFetchType: Branch
+                branch: main
+                path: harness-react-sample
+              identifier: source-code
+              type: Git
+        sources:
+          - spec:
+              connectorRef: github-connector
+              gitFetchType: Branch
+              branch: main
+              path: harness-react-sample
+            identifier: source-code
+            type: Git
+      manifests:
+        - manifest:
+            identifier: s3-manifest
+            type: S3
+            spec:
+              store:
+                type: Harness
+                spec:
+                  files:
+                    - /harness-react-sample/s3-manifest.yaml
+    gitOpsEnabled: false

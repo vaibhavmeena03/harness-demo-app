@@ -1,0 +1,25 @@
+connector:
+  name: aws-connector
+  identifier: aws-connector
+  description: "AWS connector for React app deployment to S3"
+  accountIdentifier: <+account.identifier>
+  orgIdentifier: <+org.identifier>
+  projectIdentifier: <+project.identifier>
+  type: Aws
+  spec:
+    credential:
+      type: ManualConfig
+      spec:
+        accessKey: <+secrets.getValue("aws_access_key")>
+        secretKeyRef: aws_secret_key
+        sessionTokenRef: ""
+      region: <+variables.awsRegion>
+    awsSdkClientBackOffStrategyOverride:
+      type: EqualJitterBackoffStrategy
+      spec:
+        baseDelay: 1s
+        maxBackoffTime: 120s
+        retryCount: 3
+        backoffMultiplier: 2
+    delegateSelectors: []
+    executeOnDelegate: false
