@@ -1,0 +1,33 @@
+pipeline:
+  name: Build harness-demo-app
+  identifier: Build_vaibhavmeena03_harness_demo_app_1756897213053
+  projectIdentifier: React_APP_S3_Dev
+  orgIdentifier: default
+  stages:
+    - stage:
+        name: Build
+        identifier: Build
+        type: CI
+        spec:
+          cloneCodebase: true
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Echo Welcome Message
+                  identifier: Echo_Welcome_Message
+                  spec:
+                    shell: Sh
+                    command: echo "Welcome to Harness CI"
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: account.Github
+        repoName: vaibhavmeena03/harness-demo-app
+        build: <+input>
