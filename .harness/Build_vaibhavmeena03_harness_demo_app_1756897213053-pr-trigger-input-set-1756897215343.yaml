@@ -1,0 +1,14 @@
+inputSet:
+  name: Build_vaibhavmeena03_harness_demo_app_1756897213053-pr-trigger-input-set
+  identifier: Build_vaibhavmeena03_harness_demo_app_1756897213053prtriggerinputset
+  orgIdentifier: default
+  projectIdentifier: React_APP_S3_Dev
+  pipeline:
+    identifier: Build_vaibhavmeena03_harness_demo_app_1756897213053
+    properties:
+      ci:
+        codebase:
+          build:
+            type: PR
+            spec:
+              number: <+trigger.prNumber>
